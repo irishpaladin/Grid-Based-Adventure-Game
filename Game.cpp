@@ -1,236 +1,344 @@
+//
+//  Game.cpp
+//
+//  Updated by Stephanie Irish Paladin, 2019-04-08, 3am
 
 
-
-
-/*
-Position.h
-Stephanie Irish Paladin
-last revise: March 10 11pm
-*/
-
-
-#include "Game.h"
+#include <cassert>
 #include <string>
+#include <iostream>
 
-Game::Game(const string& file_name){
-	//Loading the level
-	level=Level(file_name);
-	
+#include "Position.h"
+#include "Level.h"
+#include "Player.h"
+#include "Monster.h"
+#include "Attacker.h"
+#include "Drone.h"
+#include "Sentry.h"
+#include "Game.h"
 
-	//Initializing Monster
-	int next=0;
-	for (int i = 0; i < ROWS; i++) {
-		for (int j=0; j < COLUMNS; j++) {
-			if (level.getValue(toPosition(i,j)) == MONSTER_START) {
-				monster[next] = Monster(toPosition(i,j));
-				next++;
-			}
-		}
-	}
-	
+using namespace std;
 
-	/*monster=Monster(m_position);
-	m_position = level.getMonsterStart();
-	monster.setPosition(m_position);
-	*/
 
-	//Initializing Player
-	player = Player(level.getPlayerStart());
-	/*player=Player(p_position);
-	p_position = level.getPlayerStart();
-	player.setPosition(p_position);
-	*/
-	//playerInit(player, p_player);
+
+Game::Game()
+	: level(),
+	player(level.getPlayerStart()),
+	monsters(NULL)  // will be set below
+{
+	monsters = new Monster*[0];
+
+	assert(invariant());
 }
 
-bool Game::isOver() const {
-	if(player.isDead())return true;
-	if (level.isGoalPosition(player.getPosition()))return true;
+Game::Game(const std::string& file_name)
+	: level(file_name),
+	player(level.getPlayerStart()),
+	monsters(NULL)  // will be set by initMonsters
+{
+	initMonsters();
+
+	assert(invariant());
+}
+
+Game::Game(const Game& original)
+	: level(original.level),
+	player(original.player),
+	monsters(NULL)  // will be set by copyMonsters
+{
+	assert(original.invariant());
+
+	copyMonsters(original);
+
+	assert(invariant());
+	assert(original.invariant());
+}
+
+Game :: ~Game()
+{
+	assert(invariant());
+
+	deleteMonsters();
+}
+
+Game& Game :: operator= (const Game& original)
+{
+	assert(invariant());
+	assert(original.invariant());
+
+	if (&original != this)
+	{
+		deleteMonsters();
+
+		level = original.level;
+		player = original.player;
+		copyMonsters(original);
+	}
+
+	assert(invariant());
+	assert(original.invariant());
+	return *this;
+}
+
+
+
+bool Game::isOver() const
+{
+	assert(invariant());
+
+	if (player.isDead())
+		return true;
+	if (level.isGoalPosition(player.getPosition()))
+		return true;
 	return false;
 }
 
-void Game::print() const {
-	//level.print(monster.getPosition(), player.getPosition());
-	/*char lvl_ch[ROWS][COLUMNS];
-	char ch[] = { ' ', '^', ':', '#', ' ', '*',' ', ' ',' ' };
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			lvl_ch[i][j] = ch[level[i][j]];
-		}
-	}
-	//initializing monter and target's position
+void Game::print() const
+{
+	assert(invariant());
 
-	lvl_ch[p_position.row][p_position.column] = '@';
-	lvl_ch[m_position.row][m_position.column] = 'M';*/
+	// print top outline
+	cout << "+";
+	for (int c = 0; c < COLUMNS; c++)
+		cout << "-";
+	cout << "+" << endl;
 
-	//printing
-	cout << "\n+------------------------------------------------------------+" << endl;
-	bool print = false;
-	Position curr_pos;
-	for (int i = 0; i < ROWS; i++) {
-		cout << "|";
-		for (int j = 0; j < COLUMNS; j++) {
-			
-			curr_pos = toPosition(i, j);
-			print = false;
+	for (int r = 0; r < ROWS; r++)
+	{
+		// print left outline
+		cout << '|';
 
-			if (areEqual(player.getPosition(), curr_pos)&&!player.isDead()) {
+		// print level contents
+		for (int c = 0; c < COLUMNS; c++)
+		{
+			Position here = toPosition(r, c);
+			bool is_printed = false;
+
+			if (!player.isDead() &&
+				areEqual(player.getPosition(), here))
+			{
 				cout << '@';
-				print = true;
+				is_printed = true;
 			}
-			for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-				if (!print&&areEqual(monster[i].getPosition(), curr_pos) && !monster[i].isDead()) {
-					cout << 'M';
-					print = true;
+			for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+			{
+				if (!is_printed &&
+					!monsters[i]->isDead() &&
+					areEqual(monsters[i]->getPosition(), here))
+				{
+					cout << monsters[i]->getDisplayChar();
+					is_printed = true;
 				}
 			}
-			if(!print){
-				//cout << terrain_char[level[i][j]];
-				level.printAtPosition(curr_pos);
-			}
-
-
+			if (!is_printed)
+				level.printAtPosition(here);
 		}
-		cout << "|" << endl;
+
+		// print right outline
+		cout << '|' << endl;
 	}
-	cout << "+------------------------------------------------------------+" << endl;
 
+	// print bottom outline
+	cout << "+";
+	for (int c = 0; c < COLUMNS; c++)
+		cout << "-";
+	cout << "+" << endl;
 
-	cout << "Health: " << player.getHealth() << "\t"
-		<< " Cost: " << player.getTotalMoveCost() << "\t"
-		<< " Score: " << player.getScore() << endl;
+	cout
+		<< "Health: " << player.getHealth()
+		<< "    Move cost: " << player.getTotalMoveCost()
+		<< "    Score: " << player.getScore() << endl;
 }
 
-void Game::tryMoveNorth() {
-	//reinitialize the new position of player
-	Position p_newpos = player.getPosition();
-	p_newpos = toPosition(player.getPosition().row - 1, player.getPosition().column);
 
-	bool has_atk = false;
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (areEqual(monster[i].getPosition(), p_newpos) && !monster[i].isDead()) {
-			monster[i].receiveDamage(player.getDamage());
-			if (monster[i].isDead()) {
-				player.increaseScore(monster[i].getPoints());
-			}
-		}
-	}
-	
-	//checks if move is valid
-	if (isValid(p_newpos) == true && !level.isWall(p_newpos)&&!has_atk) {
-		player.increaseTotalMoveCost(level.getCost(p_newpos));
-		player.setPosition(p_newpos);
-	}
-	
+
+void Game::tryMoveNorth()
+{
+	assert(invariant());
+
+	Position new_player_position = player.getPosition();
+	new_player_position.row -= 1;
+
+	tryMove(new_player_position);
+
+	assert(invariant());
 }
 
-void Game::tryMoveSouth() {
-	//reinitialize the new position of player
-	Position p_newpos = player.getPosition();
-	p_newpos = toPosition(player.getPosition().row + 1, player.getPosition().column);
+void Game::tryMoveSouth()
+{
+	assert(invariant());
 
+	Position new_player_position = player.getPosition();
+	new_player_position.row += 1;
 
-	bool has_atk = false;
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (areEqual(monster[i].getPosition(), p_newpos) && !monster[i].isDead()) {
-			monster[i].receiveDamage(player.getDamage());
-			if (monster[i].isDead()) {
-				player.increaseScore(monster[i].getPoints());
-			}
-		}
-	}
+	tryMove(new_player_position);
 
-	//checks if move is valid
-	if (isValid(p_newpos) == true && !level.isWall(p_newpos) && !has_atk) {
-		player.increaseTotalMoveCost(level.getCost(p_newpos));
-		player.setPosition(p_newpos);
-	}
-
+	assert(invariant());
 }
 
-void Game::tryMoveEast() {
-	//reinitialize the new position of player
-	Position p_newpos = player.getPosition();
-	p_newpos = toPosition(player.getPosition().row, player.getPosition().column + 1);
-	
-	//checks if move is valid
-	bool has_atk = false;
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (areEqual(monster[i].getPosition(), p_newpos) && !monster[i].isDead()) {
-			monster[i].receiveDamage(player.getDamage());
-			if (monster[i].isDead()) {
-				player.increaseScore(monster[i].getPoints());
-			}
-		}
-	}
+void Game::tryMoveEast()
+{
+	assert(invariant());
 
-	//checks if move is valid
-	if (isValid(p_newpos) == true && !level.isWall(p_newpos) && !has_atk) {
-		player.increaseTotalMoveCost(level.getCost(p_newpos));
-		player.setPosition(p_newpos);
-	}
+	Position new_player_position = player.getPosition();
+	new_player_position.column += 1;
+
+	tryMove(new_player_position);
+
+	assert(invariant());
 }
 
-void Game::tryMoveWest() {
-	//reinitialize the new position of player
-	Position p_newpos = player.getPosition();
-	p_newpos = toPosition(player.getPosition().row, player.getPosition().column - 1);
-	
-	//checks if move is valid
-	bool has_atk = false;
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (areEqual(monster[i].getPosition(), p_newpos) && !monster[i].isDead()) {
-			monster[i].receiveDamage(player.getDamage());
-			if (monster[i].isDead()) {
-				player.increaseScore(monster[i].getPoints());
-			}
-		}
-	}
+void Game::tryMoveWest()
+{
+	assert(invariant());
 
-	//checks if move is valid
-	if (isValid(p_newpos) == true && !level.isWall(p_newpos) && !has_atk) {
-		player.increaseTotalMoveCost(level.getCost(p_newpos));
-		player.setPosition(p_newpos);
-	}
+	Position new_player_position = player.getPosition();
+	new_player_position.column -= 1;
+
+	tryMove(new_player_position);
+
+	assert(invariant());
 }
 
-void Game::updateMonsters() {
-	//initialize monsters's new position
-	Position p_newpos = player.getPosition();
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (!monster[i].isDead()) {
-			Position m_newpos = monster[i].calculateMove(*this, p_newpos);
-			if (isValid(m_newpos) == true) {
-				//if onster attack player
-				if (areEqual(m_newpos, p_newpos)) {
-					player.receiveDamage(monster[i].getDamage());
-				}
-				//if not
-				else {
-					monster[i].setPosition(m_newpos);
-				}
+void Game::updateMonsters()
+{
+	assert(invariant());
+
+	for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+		if (!monsters[i]->isDead())
+		{
+			Position player_position = player.getPosition();
+			Position new_monster_position = monsters[i]->calculateMove(*this, player_position);
+			assert(isValid(new_monster_position));
+
+			if (areEqual(new_monster_position, player_position))
+			{
+				// monster is attacking the player
+				player.receiveDamage(monsters[i]->getDamage());
 			}
-			else {
+			else
+			{
+				// monster is moving
+				monsters[i]->setPosition(new_monster_position);
 			}
 		}
-		//if monster is dead
-		else {
-			monster[i].setPosition(toPosition(-1, -1));
-		}
-	}
-	
-	
+
+	assert(invariant());
 }
 
-bool Game::isBlockedForMonster(const Position& position) const {
-	for (unsigned int i = 0; i < level.getMonsterCount(); i++) {
-		if (areEqual(monster[i].getPosition(), position)) {
+bool Game::isBlockedForMonster(const Position& position) const
+{
+	assert(invariant());
+	assert(isValid(position));
+
+	if (level.isWall(position))
+		return true;
+	for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+	{
+		if (!monsters[i]->isDead() &&
+			areEqual(position, monsters[i]->getPosition()))
+		{
 			return true;
 		}
 	}
-	if (level.isWall(position)) {
-		return true;
-	}
 	return false;
+}
 
+
+
+void Game::initMonsters()
+{
+	assert(monsters == NULL);
+
+	monsters = new Monster*[level.getMonsterCount()];
+
+	unsigned int next_monster = 0;
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+		{
+			Position pos = toPosition(r, c);
+			if (level.getValue(pos) == SENTRY_START)
+			{
+				monsters[next_monster] = new Sentry(pos);
+				next_monster++;
+			}	
+			else if (level.getValue(pos) == DRONE_START)
+			{
+				monsters[next_monster] = new Drone(pos);
+				next_monster++;
+			}
+			else if (level.getValue(pos) == ATTACKER_START)
+			{
+				monsters[next_monster] = new Attacker(pos);
+				next_monster++;
+			}
+		}
+	assert(next_monster == level.getMonsterCount());
+
+	assert(monsters != NULL);
+}
+
+void Game::tryMove(const Position& position)
+{
+	assert(invariant());
+
+	for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+	{
+		if (!monsters[i]->isDead() &&
+			areEqual(position, monsters[i]->getPosition()))
+		{
+			// player is attacking the monster
+			monsters[i]->receiveDamage(player.getDamage());
+			if (monsters[i]->isDead())
+				player.increaseScore(monsters[i]->getPoints());
+
+			assert(invariant());
+			return;
+		}
+	}
+
+	if (isValid(position) && !level.isWall(position))
+	{
+		// player made a valid move
+		unsigned int cost = level.getCost(position);
+		player.increaseTotalMoveCost(cost);
+		player.setPosition(position);
+	}
+	else
+	{
+		// player made an invalid move
+		// do nothing
+	}
+
+	assert(invariant());
+}
+
+void Game::copyMonsters(const Game& original)
+{
+	assert(monsters == NULL);
+
+	monsters = new Monster*[level.getMonsterCount()];
+	for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+		monsters[i] = original.monsters[i]->getClone();
+
+	assert(monsters != NULL);
+}
+
+void Game::deleteMonsters()
+{
+	assert(monsters != NULL);
+
+	for (unsigned int i = 0; i < level.getMonsterCount(); i++)
+		delete monsters[i];
+	delete[] monsters;
+	monsters = NULL;
+
+	assert(monsters == NULL);
+}
+
+bool Game::invariant() const
+{
+	if (monsters == NULL)
+		return false;
+	return true;
 }

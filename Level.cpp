@@ -1,174 +1,226 @@
+//
+//  Level.cpp
+//
+//  Implementation of the Level type for the CS 115 roguelike
+//    game.
+//
+//  By Howard Hamilton
+//  Updated by Richard Hamilton, 2019-01-01
+//  Updated by Richard Hamilton, 2019-02-14
+//  Updated by Stephanie Irish Paladin, 2019-04-08, 3am
+//
 
 
-/*
-Position.h
-Stephanie Irish Paladin
-last revise: March 10 11pm
-*/
 
-
-#include "Level.h"
-#include "Position.h"
-#include <iostream>
+#include <cassert>
+#include <cstdlib>
 #include <string>
 #include <fstream>
-#include <cstdlib>
-#include <cmath>
+#include <iostream>
 #include <iomanip>
-
 using namespace std;
 
-static const char terrain_char[] = { ' ', '^', ':', '#', ' ', '*',' ', ' ',' ' };
+#include "Level.h"
 
-Level::Level() {
-	for (int i = 1; i < ROWS; i++) {
-		for (int j = 1; j < COLUMNS; j++) {
-			level[ROWS][COLUMNS] = EMPTY;
-		}
-	}
-	level[0][0] = PLAYER_START;
+const unsigned int TERRAIN_COUNT = 9;
+const char INPUT_TERRAIN_TYPE[TERRAIN_COUNT] =
+{
+	'.', // EMPTY
+	'^', // ROCKY
+	':', // ROUGH
+	'#', // WALL
+	'P', // PLAYER_START
+	'*', // PLAYER_GOAL
+	'S', // MONSTER_START
+	'A', // ATTACKER_START
+	'D', // DRONE_START
+};
+
+const char OUTPUT_TERRAIN_TYPE[TERRAIN_COUNT] =
+{
+	' ', // EMPTY 
+	'^', // ROCKY
+	':', // ROUGH
+	'#', // WALL
+	' ', // PLAYER_START
+	'*', // PLAYER_GOAL
+	' ', // MONSTER_START
+	' ', // ATTACKER_START
+	' ', // DRONE_START
+};
+
+const unsigned int TRAVERSAL_COST[TERRAIN_COUNT] =
+{
+	1,  // EMPTY
+	2,  // ROCKY
+	4,  // ROUGH
+	1000, // WALL
+	1,  // PLAYER_START
+	1,  // PLAYER_GOAL
+	1,  // MONSTER_START
+	1,  // ATTACKER_START
+	1,  // DRONE_START
+};
+
+
+
+Level::Level()
+	: monster_count(0),drone_count(0), attacker_count(0), sentry_count(0)
+{
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+			terrain[r][c] = EMPTY;
+	terrain[0][0] = PLAYER_START;
 }
-//opening the file and soring the respictive value in the array
-Level::Level(const string str) {
-	ifstream indata(str.c_str());
-	char ch;
-	indata >> ch;
-	monster_count = 0;
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			switch (ch)
+
+Level::Level(const string& file_name)
+	: monster_count(0), drone_count(0), attacker_count(0), sentry_count(0)
+{
+	ifstream in(file_name.c_str());
+
+	if (!in)
+	{
+		cout << "Error: Cannot read from file named " << file_name << endl;
+		exit(1);  // terminate program immediately
+	}
+
+	for (int r = 0; in && (r < ROWS); r++)
+	{
+		for (int c = 0; in && (c < COLUMNS); c++)
+		{
+			char next_char;
+			in >> next_char;
+
+			bool is_input_valid = false;
+			for (unsigned int t = 0; t < TERRAIN_COUNT; t++)
 			{
-			case '.':
-				level[i][j] = 0;
-				break;
-			case '^':
-				level[i][j] = 1;
-				break;
-			case ':':
-				level[i][j] = 2;
-				break;
-			case '#':
-				level[i][j] = 3;
-				break;
-			case 'P':
-				level[i][j] = 4;
-				break;
-			case '*':
-				level[i][j] = 5;
-				break;
-			case 'S':
-				level[i][j] = 6;
-				monster_count++;
-				break;
-			case 'A':
-				level[i][j] = 7;
-				break;
-			case 'D':
-				level[i][j] = 8;
-				break;
+				if (next_char == INPUT_TERRAIN_TYPE[t])
+				{
+					terrain[r][c] = t;
+					is_input_valid = true;
+				}
 			}
-			indata >> ch;
-		}
-	}
-	indata.close();
-}
 
-//returning the monster's row and columns in the 2 int variable
-Position Level::getMonsterStart() const {
-	Position p;
-	p.row = -1;
-	p.column = -1;
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			if (level[i][j] == MONSTER_START) {
-				p.row = i;
-				p.column = j;
-				return p;
+			if (is_input_valid)
+			{
+				switch (terrain[r][c])
+				{
+				case SENTRY_START:
+					monster_count++;
+					sentry_count++;
+					break;
+				case DRONE_START:
+					monster_count++;
+					drone_count++;
+					break;
+				case ATTACKER_START:
+					monster_count++;
+					attacker_count++;
+					break;
+				}
+			}
+			else
+			{
+				cout << "Error: Invalid input at row " << r << ", column " << c
+					<< ", substituted empty terrain" << endl;
+				terrain[r][c] = EMPTY;
 			}
 		}
 	}
-	return p;
 }
 
-//storing the player's row and columns in the 2 int variable
-Position Level::getPlayerStart() const {
-	Position p;
-	p.row = -1;
-	p.column = -1;
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			if (level[i][j] == PLAYER_START) {
-				p.row = i;
-				p.column = j;
-				return p;
-			}
-		}
-	}
-	return p;
+Level::Level(const Level& original) {
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+			terrain[r][c] = original.terrain[r][c];
+	monster_count = original.getMonsterCount();
+	drone_count = original.drone_count;
+	attacker_count = original.attacker_count;
+	sentry_count = original.sentry_count;
 }
 
-//returns the travel cost of a certain array element
-unsigned int Level::getCost(const Position & p)const {
-	unsigned int cost[] = { 1,2,4,1000,1,1,1,1,1 };
-	return cost[level[p.row][p.column]];
+Level::~Level() {}// empty
+
+Level& Level::operator= (const Level& original) {
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+			terrain[r][c] = original.terrain[r][c];
+	monster_count = original.getMonsterCount();
+	return *this;
 }
 
-//prints the level
+
 /*
-void Level::print(const Position& m_position, const Position& p_position)const {
-	/*char lvl_ch[ROWS][COLUMNS];
-	char ch[] = { ' ', '^', ':', '#', ' ', '*',' ', ' ',' ' };
-	for (int i = 0; i < ROWS; i++) {
-		for (int j = 0; j < COLUMNS; j++) {
-			lvl_ch[i][j] = ch[level[i][j]];
-		}
-	}
-	//initializing monter and target's position
+Position Level::getMonsterStart() const
+{
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+			if (terrain[r][c] == MONSTER_START)
+				return toPosition(r, c);
 
-	lvl_ch[p_position.row][p_position.column] = '@';
-	lvl_ch[m_position.row][m_position.column] = 'M';*/
-/*
-	//printing
-	cout << "\n+------------------------------------------------------------+" << endl;
-	for (int i = 0; i < ROWS; i++) {
-		cout << "|";
-		for (int j = 0; j < COLUMNS; j++) {
-			if (areEqual(p_position,toPosition(i,j))) {
-				cout << '@';
-			}
-			else if (areEqual(m_position, toPosition(i, j))) {
-				cout << 'M';
-			}
-			else {
-				//cout << terrain_char[level[i][j]];
-				printAtPosition(toPosition(i, j));
-			}
-
-			
-		}
-		cout << "|" << endl;
-	}
-	cout << "+------------------------------------------------------------+" << endl;
+	// default: return upper left corner if not found
+	return toPosition(0, 0);
 }
 */
 
+Position Level::getPlayerStart() const
+{
+	for (int r = 0; r < ROWS; r++)
+		for (int c = 0; c < COLUMNS; c++)
+			if (terrain[r][c] == PLAYER_START)
+				return toPosition(r, c);
 
-//returns true if the position is a wall
-bool Level::isWall(const Position& p) const {
-	return level[p.row][p.column] == 3;
+	// default: return upper left corner if not found
+	return toPosition(0, 0);
 }
 
-
-unsigned int Level::getMonsterCount() const{
+unsigned int Level::getMonsterCount() const
+{
 	return monster_count;
 }
-unsigned int Level::getValue(const Position& p) const {
-	return level[p.row][p.column];
-}
-void Level:: printAtPosition(const Position& p) const {
-	cout << terrain_char[level[p.row][p.column]];
+
+unsigned int Level::getValue(const Position& position) const
+{
+	assert(isValid(position));
+
+	return terrain[position.row][position.column];
 }
 
-bool Level::isGoalPosition(const Position& p) const {
-	return level[p.row][p.column] == PLAYER_GOAL;
+unsigned int Level::getCost(const Position& position) const
+{
+	assert(isValid(position));
+
+	unsigned int t = terrain[position.row][position.column];
+	assert(t < TERRAIN_COUNT);
+	return TRAVERSAL_COST[t];
 }
+
+void Level::printAtPosition(const Position& position) const
+{
+	assert(isValid(position));
+
+	unsigned int t = terrain[position.row][position.column];
+	assert(t < TERRAIN_COUNT);
+	cout << OUTPUT_TERRAIN_TYPE[t];
+}
+
+bool Level::isWall(const Position& position) const
+{
+	assert(isValid(position));
+
+	if (terrain[position.row][position.column] == WALL)
+		return true;
+	else
+		return false;
+}
+
+bool Level::isGoalPosition(const Position& position) const
+{
+	assert(isValid(position));
+
+	if (terrain[position.row][position.column] == PLAYER_GOAL)
+		return true;
+	else
+		return false;
+}
+

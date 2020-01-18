@@ -1,220 +1,194 @@
-
-/*
-Position.h
-Stephanie Irish Paladin
-last revise: March 10 11pm
-*/
-
-
 //
-//  Monster.h
-//
-//  Encapsulates a module to represent an (enemy) monster in a
-//    grid-based game.
+//  Monster.cpp
 //
 
+//  Updated by Stephanie Irish Paladin, 2019-04-08, 3am
 
+#include <cassert>
+#include <iostream>
 
-
-
-//#include "Position.h"
-//#include "Monster.h"
-//#include "Level.h"
+#include "Position.h"
 #include "Game.h"
+#include "Monster.h"
+
+using namespace std;
+
+static const          int STARTING_HEALTH = 20;
+static const          int DAMAGE = 3;
+static const unsigned int POINTS = 50;
+
+static const bool DEBUGGING_MONSTER_ALLOCATION = false;
+static int allocated = 0;
 
 
 
-
-static const int STARTING_HEALTH = 20;
-static const int DAMAGE = 3;
-static const int POINTS = 50;
-
-Monster::Monster() 
+Monster::Monster()
+	: health(0),
+	damage(DAMAGE),
+	position(toPosition(0, 0)),
+	points(POINTS)
 {
-	health = 0;
-	damage = 0;
-	position = toPosition(-1, -1);
-	points = 0;
+	allocated++;
+	if (DEBUGGING_MONSTER_ALLOCATION)
+		cout << "Default constructor: now " << allocated << " monsters allocated" << endl;
 }
 
-//
-//  Monster
-//
-//  Purpose: To initialize a monster at a specific position.
-//  Parameter(s):
-//    <1> start: The starting position for the monster
-//  Precondition: N/A
-//  Returns: N/A
-//  Side Effect: The Monster monster is initialized to have
-//               default values and to be at position start.
-//
-Monster::Monster(const Position& start) 
-:position(start),
-health(STARTING_HEALTH),
-damage(DAMAGE),
-points(POINTS)
+Monster::Monster(const Position& start)
+	: health(STARTING_HEALTH),
+	damage(DAMAGE),
+	position(start),
+	points(POINTS)
 {
-	
+	assert(isValid(start));
+
+	allocated++;
+	if (DEBUGGING_MONSTER_ALLOCATION)
+		cout << "Constructor: now " << allocated << " monsters allocated" << endl;
 }
 
-//
-//  isDead
-//
-//  Purpose: To determine if a monster is dead.
-//  Parameter(s):N/A
-//  Precondition: N/A
-//  Returns: Whether the Monster is dead.
-//  Side Effect: N/A
-//
-bool Monster::isDead() const {
-	if (health <= 0) {
+Monster::Monster(const Position& start,
+				int health1,
+				int damage1,
+				unsigned int points1)
+			: health(health1),
+			damage(damage1),
+			position(start),
+			points(points1)
+{
+	assert(isValid(start));
+
+	allocated++;
+	if (DEBUGGING_MONSTER_ALLOCATION)
+		cout << "Constructor: now " << allocated << " monsters allocated" << endl;
+}
+
+// put in Monster copy constructor to test memory allocations
+//	allocated++;
+//	if(DEBUGGING_MONSTER_ALLOCATION)
+//		cout << "Copy Constructor: now " << allocated << " monsters allocated" << endl;
+
+// put in Monster destructor to test memory allocations
+//	allocated--;
+//	if(DEBUGGING_MONSTER_ALLOCATION)
+//		cout << "Destructor: now " << allocated << " monsters allocated" << endl;
+Monster::Monster(const Monster& original) {
+	health = original.health;
+	damage = original.damage;
+	position = original.position;
+	points = original.points;
+}
+
+Monster::~Monster() {
+}
+
+Monster& Monster::operator= (const Monster& original) {
+	health = original.health;
+	damage = original.damage;
+	position = original.position;
+	points = original.points;
+	return *this;
+}
+
+
+bool Monster::isDead() const
+{
+	if (health <= 0)
 		return true;
-	}
-	else {
-		return false;
-	}
+	return false;
 }
 
-//
-//  getDamage
-//
-//  Purpose: To determine how much damage a Monster deals when
-//           attacking.
-//  Parameter(s):N/A
-//  Precondition: N/A
-//  Returns: How much damage Monster monster deals when
-//           attacking.
-//  Side Effect: N/A
-//
-int Monster::getDamage() const {
+int Monster::getDamage() const
+{
 	return damage;
 }
 
-//
-//  getPoints
-//
-//  Purpose: To determine how many points are awarded for
-//           killing a monster.
-//  Parameter(s):N/A
-//  Precondition: N/A
-//  Returns: How many points are awarded for killing Monster
-//           monster.
-//  Side Effect: N/A
-//
-unsigned int Monster::getPoints()const {
+unsigned int Monster::getPoints() const
+{
 	return points;
 }
 
-//
-//  getPosition
-//
-//  Purpose: To determine a Monster's current position.
-//  Parameter(s):N/A
-//  Precondition: N/A
-//  Returns: Monster monster's current position.
-//  Side Effect: N/A
-//
-const Position&  Monster::getPosition() const {
+const Position& Monster::getPosition() const
+{
 	return position;
 }
 
-//
-//  setPosition
-//
-//  Purpose: To change a Monster's current position.
-//  Parameter(s):
-//    <1> p: The new position
-//  Precondition: N/A
-//  Returns: N/A
-//  Side Effect: The current position of Monster monster is set
-//               to p.
-//
-void  Monster::setPosition(const Position& p) {
+
+
+void Monster::setPosition(const Position& p)
+{
+	assert(isValid(p));
+
 	position = p;
 }
 
-//
-//  monsterReceiveDamage
-//
-//  Purpose: To reduce an Monster's health.
-//  Parameter(s):
-//    <1> amount: The amount to reduce the Monster's health by
-//  Precondition: N/A
-//  Returns: N/A
-//  Side Effect: Monster monster's health is reduced by amount.
-//
-void  Monster::receiveDamage(int amount) {
-	health -= amount;
+void Monster::receiveDamage(int amount)
+{
+	health = health - amount;
 }
 
-//
-//  calculateMove
-//
-//  Purpose: To calculate a monster's next move in the game.
-//  Parameter(s):
-//    <1> level: The level
-//    <2> player_position: The player's current position
-//  Precondition: N/A
-//  Returns: The new position for Monster monster.  If this is
-//           the same as the player's position, monster is
-//           attacking the player instead of moving.
-//  Side Effect: N/A
-//
-Position  Monster::calculateMove(const Game& game, const Position& player_position) const {
-	//stores position
-	Position p_north, p_south, p_east, p_west, f_pos;
-	//where to store the distance
-	double north, south, east, west, f_distance;
+Position Monster::calculateToPosition(const Game& game,
+	const Position& player_position) const
+{
+	const double DONT_GO_THERE = 1.0e40;
 
-	//initialize the positions tomonster position
-	p_north = position;
-	p_south = position;
-	p_east = position;
-	p_west = position;
-	f_pos = position;
+	// calculate possible moves
 
-	//change the row/column
-	p_north.row--;
-	p_south.row++;
-	p_east.column++;
-	p_west.column--;
+	Position north = position;
+	north.row--;
+	Position south = position;
+	south.row++;
+	Position east = position;
+	east.column++;
+	Position west = position;
+	west.column--;
 
-	//initialize the distance in current position
-	f_distance = calculateDistance(position, player_position);
+	// calculate distances
 
-	//finding the best move
-	if (!game.isBlockedForMonster(p_north)) {
-		north = calculateDistance(p_north, player_position);
-		if (f_distance >= north) {
-			f_distance = north;
-			f_pos = p_north;
-		}
+	double here_distance = calculateDistance(position, player_position);
+	double north_distance = calculateDistance(north, player_position);
+	double south_distance = calculateDistance(south, player_position);
+	double east_distance = calculateDistance(east, player_position);
+	double west_distance = calculateDistance(west, player_position);
+
+	// forbid invalid moves
+
+	if (!isValid(north) || game.isBlockedForMonster(north))
+		north_distance = DONT_GO_THERE;
+	if (!isValid(south) || game.isBlockedForMonster(south))
+		south_distance = DONT_GO_THERE;
+	if (!isValid(east) || game.isBlockedForMonster(east))
+		east_distance = DONT_GO_THERE;
+	if (!isValid(west) || game.isBlockedForMonster(west))
+		west_distance = DONT_GO_THERE;
+
+	// choose best move
+
+	if (north_distance < south_distance &&
+		north_distance <= east_distance &&
+		north_distance <= west_distance &&
+		north_distance < here_distance)
+	{
+		return north;
 	}
-	if (!game.isBlockedForMonster(p_south)) {
-		south = calculateDistance(p_south, player_position);
-		if (f_distance >= south) {
-			f_distance = south;
-			f_pos = p_south;
-		}
+	else if (south_distance <= east_distance &&
+		south_distance <= west_distance &&
+		south_distance < here_distance)
+	{
+		return south;
 	}
-	if (!game.isBlockedForMonster(p_east)) {
-		east = calculateDistance(p_east, player_position);
-		if (f_distance >= east) {
-			f_distance = east;
-			f_pos = p_east;
-		}
+	else if (east_distance < west_distance &&
+		east_distance < here_distance)
+	{
+		return east;
 	}
-
-	if (!game.isBlockedForMonster(p_west)) {
-		west = calculateDistance(p_west, player_position);
-		if (f_distance >= west) {
-			f_distance = west;
-			f_pos = p_west;
-		}
+	else if (west_distance < here_distance)
+	{
+		return west;
 	}
-
-
-	return f_pos;
-
-
+	else
+	{
+		// all moves are bad; stay at current position
+		return position;
+	}
 }
+
